@@ -1,8 +1,10 @@
 #pragma once
 
+#include <vector>
 #include <string>
 
 #define g 9.81
+#define numberPack 10
 
 typedef struct pack_input {
 	pack_input() {
@@ -51,10 +53,11 @@ class Device
 public:
 	Device();
 	static void pathRestoration(string inputFile, string outputFile);
-	static void algorithmPathRestoration(pack_input &inputNext, pack_input &inputFirst, pack_output &output);
+	static void algorithmPathRestoration(vector<pack_input> &input, vector<pack_output> &output, pack_output &state, pack_input &state_input);
 	static void writePackToFile(ofstream &out, pack_output &packOut);
 	static void readPackOfFile(ifstream &inp, pack_input &packInp);
 	static void backRotate(pack_input &inputNext, pack_input &inputFirst, pack_output &output);
+	static vector<pack_input> smoothing(vector<pack_input> &input);
 	~Device();
 };
 

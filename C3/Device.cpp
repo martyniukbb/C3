@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -11,9 +12,9 @@ Device::Device()
 }
 
 void Device::pathRestoration(string inputFile, string outputFile) {
-	
-	pack_input lastReadPack;
-	pack_output lastOutputPack;
+
+	pack_input state_input;
+	pack_output state;
 
 	int count = 0;
 
@@ -22,40 +23,64 @@ void Device::pathRestoration(string inputFile, string outputFile) {
 
 	file >> count;
 
-	readPackOfFile(file, lastReadPack);
-	lastReadPack.accel_z -= g;
+	readPackOfFile(file, state_input);
+	writePackToFile(file_out, state);
 
-	writePackToFile(file_out, lastOutputPack);
+	for(int i = 1; i < count;) {
 
-	for(int i = 1; i < count; i++) {
-		pack_input readBuffer;
+		vector<pack_input> lastReadPack;
+		vector<pack_output> lastOutputPack;
 
-		readPackOfFile(file, readBuffer);
-		readBuffer.accel_z -= g;
-
-		lastOutputPack.v_x = readBuffer.v_x;
+		for (int j = 0; (j < numberPack) && (i < count); j++, i++) {
+			pack_input readBuffer;
+			readPackOfFile(file, readBuffer);
+			lastReadPack.push_back(readBuffer);
+		}
 
 		///////////////
-		algorithmPathRestoration(readBuffer, lastReadPack, lastOutputPack);
+		algorithmPathRestoration(lastReadPack, lastOutputPack, state, state_input);
 		///////////////
 
-		writePackToFile(file_out, lastOutputPack);
-
-		lastReadPack = readBuffer;
+		for (int j = 0; j < int(lastOutputPack.size()); j++) {
+			writePackToFile(file_out, lastOutputPack[j]);
+		}
 	}
 	file.close();
 	file_out.close();
 }
 
-void Device::algorithmPathRestoration(pack_input &inputNext, pack_input &inputFirst, pack_output &output) {
-	//output.v_x
+void Device::algorithmPathRestoration(vector<pack_input> &input, vector<pack_output> &output, pack_output &state, pack_input &state_input) {
+	
+	for (int i = 0; i < input.size(); i++) {
+		input[i].accel_z -= g;
+	}
 
-	double delta_time = inputNext.t - inputFirst.t;
+	input = smoothing(input);
 
-	output.v_y += delta_time * inputFirst.accel_y;
-	output.v_z += delta_time * inputFirst.accel_z;
+	for (int i = 0; i < input.size(); i++) {
 
-	backRotate(inputNext, inputFirst, output);
+		pack_output outputBuffer;
+
+		double delta_time = input[i].t - state_input.t;
+
+		state.v_x = input[i].v_x;
+
+		state.v_y += delta_time * input[i].accel_y;
+		state.v_z += delta_time * input[i].accel_z;
+
+		backRotate(input[i], state_input, state);
+
+		outputBuffer.t = state.t;
+		outputBuffer.v_x = state.v_x;
+		outputBuffer.v_y = state.v_y;
+		outputBuffer.v_z = state.v_z;
+		outputBuffer.x = state.x;
+		outputBuffer.y = state.y;
+		outputBuffer.z = state.z;
+
+		output.push_back(outputBuffer);
+		state_input = input[i];
+	}
 }
 
 void Device::writePackToFile(ofstream &out, pack_output &packOut) {
@@ -101,6 +126,26 @@ void Device::backRotate(pack_input &inputNext, pack_input &inputFirst, pack_outp
 	output.x += delta_time * v_x;
 	output.y += delta_time * v_y;
 	output.z += delta_time * v_z;
+}
+
+vector<pack_input> Device::smoothing(vector<pack_input> &input) {
+	vector<pack_input> result;
+
+	for (int i = 0; i < input.size()-1; i++) {
+
+		pack_input push;
+
+		push = input[i];
+
+		push.accel_x = (input[i].accel_x + input[i + 1].accel_x) / 2.0;
+		push.accel_y = (input[i].accel_y + input[i + 1].accel_y) / 2.0;
+		push.accel_z = (input[i].accel_z + input[i + 1].accel_z) / 2.0;
+
+		result.push_back(push);
+	}
+	result.push_back(input[input.size() - 1]);
+
+	return result;
 }
 
 Device::~Device()
