@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+#include <Eigen/Dense>
+
+#include "kalman.h"
+
 using namespace std;
 
 Device::Device()
@@ -167,19 +171,29 @@ void Device::backRotate(pack_input &inputNext, pack_input &inputFirst, pack_outp
 vector<pack_input> Device::smoothing(vector<pack_input> &input) {
 	vector<pack_input> result;
 
-	for (int i = 0; i < input.size()-1; i++) {
+	vector<double> accel_x, accel_y, accel_z;
 
+	for (int i = 0; i < input.size(); i++) {
+		accel_x.push_back(input[i].accel_x);
+		accel_y.push_back(input[i].accel_y);
+		accel_z.push_back(input[i].accel_z);
+	}
+
+	accel_x = smoothingKalman(accel_x);
+	accel_y = smoothingKalman(accel_y);
+	accel_z = smoothingKalman(accel_z);
+
+	for (int i = 0; i < input.size(); i++) {
 		pack_input push;
 
 		push = input[i];
 
-		push.accel_x = (input[i].accel_x + input[i + 1].accel_x) / 2.0;
-		push.accel_y = (input[i].accel_y + input[i + 1].accel_y) / 2.0;
-		push.accel_z = (input[i].accel_z + input[i + 1].accel_z) / 2.0;
+		push.accel_x = accel_x[i];
+		push.accel_y = accel_y[i];
+		push.accel_z = accel_z[i];
 
 		result.push_back(push);
 	}
-	result.push_back(input[input.size() - 1]);
 
 	return result;
 }
@@ -187,19 +201,27 @@ vector<pack_input> Device::smoothing(vector<pack_input> &input) {
 vector<omega> Device::smoothing(vector<omega> &input) {
 	vector<omega> result;
 
-	for (int i = 0; i < input.size() - 1; i++) {
+	vector<double> omega_x, omega_y, omega_z;
 
+	for (int i = 0; i < input.size(); i++) {
+		omega_x.push_back(input[i].omega_x);
+		omega_y.push_back(input[i].omega_y);
+		omega_z.push_back(input[i].omega_z);
+	}
+
+	omega_x = smoothingKalman(omega_x);
+	omega_y = smoothingKalman(omega_y);
+	omega_z = smoothingKalman(omega_z);
+
+	for (int i = 0; i < input.size(); i++) {
 		omega push;
 
-		push = input[i];
-
-		push.omega_x = (input[i].omega_x + input[i + 1].omega_x) / 2.0;
-		push.omega_y = (input[i].omega_y + input[i + 1].omega_y) / 2.0;
-		push.omega_z = (input[i].omega_z + input[i + 1].omega_z) / 2.0;
+		push.omega_x = omega_x[i];
+		push.omega_y = omega_y[i];
+		push.omega_z = omega_z[i];
 
 		result.push_back(push);
 	}
-	result.push_back(input[input.size() - 1]);
 
 	return result;
 }
@@ -211,6 +233,53 @@ void Device::subtractionCentrifugalForce(pack_output &state, pack_input &input, 
 	state.v_x -= deltaTime * vx;
 	state.v_y -= deltaTime * vy;
 	state.v_z -= deltaTime * vz;
+}
+
+vector<double> Device::smoothingKalman(vector<double> &measurements) {
+
+	vector<double> result;
+
+	////////////////////
+	int n = 3; // Number of states
+	int m = 1; // Number of measurements
+
+	double dt = 0.01; // Time step
+
+	Eigen::MatrixXd A(n, n); // System dynamics matrix
+	Eigen::MatrixXd C(m, n); // Output matrix
+	Eigen::MatrixXd Q(n, n); // Process noise covariance
+	Eigen::MatrixXd R(m, m); // Measurement noise covariance
+	Eigen::MatrixXd P(n, n); // Estimate error covariance
+
+							 // Discrete LTI projectile motion, measuring position only
+	A << 1, dt, 0, 0, 1, dt, 0, 0, 1;
+	C << 1, 0, 0;
+
+	// Reasonable covariance matrices
+	Q << .05, .05, .0, .05, .05, .0, .0, .0, .0;
+	R << 5;
+	P << .1, .1, .1, .1, 10000, 10, .1, 10, 100;
+
+	// Construct the filter
+	KalmanFilter kf(dt, A, C, Q, R, P);
+
+	// Best guess of initial states
+	Eigen::VectorXd x0(n);
+	x0 << measurements[0], 0, -9.81;
+	kf.init(0, x0);
+
+	// Feed measurements into filter, output estimated states
+	double t = 0;
+	Eigen::VectorXd y(m);
+	result.push_back(kf.state().transpose()[0]);
+	for (int i = 0; i < measurements.size(); i++) {
+		t += dt;
+		y << measurements[i];
+		kf.update(y);
+		result.push_back(kf.state().transpose()[0]);
+	}
+
+	return result;
 }
 
 Device::~Device()

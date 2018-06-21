@@ -71,6 +71,7 @@ public:
 	static vector<pack_input> smoothing(vector<pack_input> &input);
 	static vector<omega> smoothing(vector<omega> &input);
 	static void subtractionCentrifugalForce(pack_output &state, pack_input &input, omega stateOmega, double deltaTime);
+	static vector<double> smoothingKalman(vector<double> &input);
 	~Device();
 };
 
