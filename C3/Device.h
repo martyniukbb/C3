@@ -67,7 +67,7 @@ public:
 	static void algorithmPathRestoration(vector<pack_input> &input, vector<pack_output> &output, vector<omega> omegaPack, pack_output &state, pack_input &state_input);
 	static void writePackToFile(ofstream &out, pack_output &packOut);
 	static void readPackOfFile(ifstream &inp, pack_input &packInp);
-	static void backRotate(pack_input &inputNext, pack_input &inputFirst, pack_output &output);
+	static pack_output backRotate(pack_input &inputNext, pack_input &inputFirst, pack_output &output);
 	static vector<pack_input> smoothing(vector<pack_input> &input);
 	static vector<omega> smoothing(vector<omega> &input);
 	static void subtractionCentrifugalForce(pack_output &state, pack_input &input, omega stateOmega, double deltaTime);

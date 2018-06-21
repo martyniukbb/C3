@@ -85,9 +85,7 @@ void Device::algorithmPathRestoration(vector<pack_input> &input, vector<pack_out
 
 		double delta_time = input[i].t - state_input.t;
 
-		//state.v_x = input[i].v_x;
-
-		state.v_x += delta_time * input[i].accel_x;
+		//state.v_x += delta_time * input[i].accel_x;
 		state.v_y += delta_time * input[i].accel_y;
 		state.v_z += delta_time * input[i].accel_z;
 
@@ -96,15 +94,18 @@ void Device::algorithmPathRestoration(vector<pack_input> &input, vector<pack_out
 			subtractionCentrifugalForce(state, input[i], omegaPack[i], delta_time);
 		//////////////
 
-		backRotate(input[i], state_input, state);
+		state.v_x = input[i].v_x;
 
-		outputBuffer.t = state.t;
-		outputBuffer.v_x = state.v_x;
-		outputBuffer.v_y = state.v_y;
-		outputBuffer.v_z = state.v_z;
-		outputBuffer.x = state.x;
-		outputBuffer.y = state.y;
-		outputBuffer.z = state.z;
+		pack_output resultRotate = backRotate(input[i], state_input, state);
+
+		////////////
+		state.t = input[i].t;
+		state.x += delta_time * resultRotate.v_x;
+		state.y += delta_time * resultRotate.v_y;
+		state.z += delta_time * resultRotate.v_z;
+		////////////
+
+		outputBuffer = state;
 
 		output.push_back(outputBuffer);
 		state_input = input[i];
@@ -130,8 +131,8 @@ void Device::readPackOfFile(ifstream &inp, pack_input &packInp) {
 	inp >> packInp.v_x;
 }
 
-void Device::backRotate(pack_input &inputNext, pack_input &inputFirst, pack_output &output) {
-	double delta_time = inputNext.t - inputFirst.t;
+pack_output Device::backRotate(pack_input &inputNext, pack_input &inputFirst, pack_output &output) {
+	pack_output result;
 
 	double alfa = inputFirst.fi_x,
 		beta = inputFirst.fi_y,
@@ -162,26 +163,36 @@ void Device::backRotate(pack_input &inputNext, pack_input &inputFirst, pack_outp
 		+ output.v_y * (-1 * cos(beta)*sin(alfa))
 		+ output.v_z * (cos(alfa)*cos(beta));
 
-	output.t = inputNext.t;
-	output.x += delta_time * v_x;
-	output.y += delta_time * v_y;
-	output.z += delta_time * v_z;
+	result.v_x = v_x;
+	result.v_y = v_y;
+	result.v_z = v_z;
+
+	return result;
 }
 
 vector<pack_input> Device::smoothing(vector<pack_input> &input) {
 	vector<pack_input> result;
 
 	vector<double> accel_x, accel_y, accel_z;
+	vector<double> fi_x, fi_y, fi_z;
 
 	for (int i = 0; i < input.size(); i++) {
 		accel_x.push_back(input[i].accel_x);
 		accel_y.push_back(input[i].accel_y);
 		accel_z.push_back(input[i].accel_z);
+
+		fi_x.push_back(input[i].fi_x);
+		fi_y.push_back(input[i].fi_y);
+		fi_z.push_back(input[i].fi_z);
 	}
 
 	accel_x = smoothingKalman(accel_x);
 	accel_y = smoothingKalman(accel_y);
 	accel_z = smoothingKalman(accel_z);
+
+	fi_x = smoothingKalman(fi_x);
+	fi_y = smoothingKalman(fi_y);
+	fi_z = smoothingKalman(fi_z);
 
 	for (int i = 0; i < input.size(); i++) {
 		pack_input push;
@@ -191,6 +202,10 @@ vector<pack_input> Device::smoothing(vector<pack_input> &input) {
 		push.accel_x = accel_x[i];
 		push.accel_y = accel_y[i];
 		push.accel_z = accel_z[i];
+
+		push.fi_x = fi_x[i];
+		push.fi_y = fi_y[i];
+		push.fi_z = fi_z[i];
 
 		result.push_back(push);
 	}
