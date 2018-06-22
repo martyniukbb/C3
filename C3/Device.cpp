@@ -86,6 +86,7 @@ void Device::algorithmPathRestoration(vector<pack_input> &input, vector<pack_out
 		double delta_time = input[i].t - state_input.t;
 
 		//state.v_x += delta_time * input[i].accel_x;
+		state.v_x = input[i].v_x;
 		state.v_y += delta_time * input[i].accel_y;
 		state.v_z += delta_time * input[i].accel_z;
 
@@ -93,8 +94,6 @@ void Device::algorithmPathRestoration(vector<pack_input> &input, vector<pack_out
 		if(i < input.size() - 1)
 			subtractionCentrifugalForce(state, input[i], omegaPack[i], delta_time);
 		//////////////
-
-		state.v_x = input[i].v_x;
 
 		pack_output resultRotate = backRotate(input[i], state_input, state);
 
