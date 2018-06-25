@@ -71,6 +71,96 @@ void Device::pathRestoration(string inputFile, string outputFile) {
 	file_out.close();
 }
 
+void Device::determinationOfMeasurementErrors(string inputTrajectory, string inputGPS) {
+
+	vector<pack_output> trajectory;
+	pack_output trajectory_start, trajectory_end;
+	double count = 0;
+
+	////////////////
+	ifstream file(inputTrajectory);
+	file >> count;
+
+	for (int i = 0; i < count; i++) {
+		pack_output push;
+
+		file >> push.t;
+		file >> push.x;
+		file >> push.y;
+		file >> push.z;
+
+		trajectory.push_back(push);
+
+		if (i == 0)
+			trajectory_start = push;
+		if ((i + 1) == count)
+			trajectory_end = push;
+	}
+
+	file.close();
+	////////////////
+
+	/////////
+	ifstream fileGPS(inputGPS);
+
+	gps gps_start = readGPSPackOfFile(fileGPS);
+	gps gps_end = readGPSPackOfFile(fileGPS);
+
+	fileGPS.close();
+	/////////
+
+	vecXYZ pXYZ, pXYZ_correct; // 0 0 0 0 0 0
+
+	resGPS resGPS_correct = gettingDifferenceGPS(gps_start, gps_end);
+
+	pXYZ.x = trajectory_end.x - trajectory_start.x;
+	pXYZ.y = trajectory_end.y - trajectory_start.y;
+	pXYZ.z = trajectory_end.z - trajectory_start.z;
+
+	pXYZ_correct.z = resGPS_correct.h2 - resGPS_correct.h1;
+
+	double m_d2 = sqrt(pow(resGPS_correct.distance,2) - pow(pXYZ_correct.z,2));
+
+	vecXY pXY;
+
+	pXY.x = pXYZ.x;
+	pXY.y = pXYZ.y;
+
+	double modPXY = sqrt(pow(pXY.x, 2) + pow(pXY.y, 2));
+
+	pXY.x /= modPXY;
+	pXY.y /= modPXY;
+
+	pXY.x *= m_d2;
+	pXY.y *= m_d2;
+
+	pXYZ_correct.x = pXY.x;
+	pXYZ_correct.y = pXY.y;
+
+	/////////////////////////////////////
+	double x_cor, y_cor, z_cor;
+
+	x_cor = pXYZ_correct.x - pXYZ.x;
+	y_cor = pXYZ_correct.y - pXYZ.y;
+	z_cor = pXYZ_correct.z - pXYZ.z;
+
+	x_cor /= count;
+	y_cor /= count;
+	z_cor /= count;
+
+	for (int i = 0; i < count; i++) {
+		trajectory[i].x += x_cor * (i + 1);
+		trajectory[i].y += y_cor * (i + 1);
+		trajectory[i].z += z_cor * (i + 1);
+	}
+
+	/////////////////////////////////////////////////////
+
+	/////////////////////////////////////////////////////
+
+	/////////////////////////////////////
+}
+
 void Device::algorithmPathRestoration(vector<pack_input> &input, vector<pack_output> &output, vector<omega> omegaPack, pack_output &state, pack_input &state_input) {
 	
 	for (int i = 0; i < input.size(); i++) {

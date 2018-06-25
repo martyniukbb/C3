@@ -8,6 +8,26 @@
 #define r0 6371
 #define pi 3.14
 
+typedef struct vecXYZ {
+	vecXYZ() {
+		x = 0.0;
+		y = 0.0;
+		z = 0.0;
+	}
+	double x,
+		y,
+		z;
+} vec;
+
+typedef struct vecXY {
+	vecXY() {
+		x = 0.0;
+		y = 0.0;
+	}
+	double x,
+		y;
+} vecXY;
+
 typedef struct resGPS {
 	double h1,
 		h2,
@@ -84,6 +104,7 @@ class Device
 public:
 	Device();
 	static void pathRestoration(string inputFile, string outputFile);
+	static void determinationOfMeasurementErrors(string inputTrajectory, string inputGPS);
 	static void algorithmPathRestoration(vector<pack_input> &input, vector<pack_output> &output, vector<omega> omegaPack, pack_output &state, pack_input &state_input);
 	static void writePackToFile(ofstream &out, pack_output &packOut);
 	static void readPackOfFile(ifstream &inp, pack_input &packInp);
