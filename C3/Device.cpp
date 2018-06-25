@@ -130,6 +130,48 @@ void Device::readPackOfFile(ifstream &inp, pack_input &packInp) {
 	inp >> packInp.v_x;
 }
 
+gps Device::readGPSPackOfFile(ifstream &inp) {
+	gps result;
+
+	string buf;
+	int bufInt = 0;
+
+	inp >> buf;
+	inp >> buf;
+	inp >> result.latitude;
+
+	result.latitude /= 100;
+	result.latitude *= pi / 180.0;
+
+	inp >> buf;
+	if (buf.size() == 1)
+		if (buf[0] == 'S')
+			result.latitude *= -1;
+
+	inp >> result.longitude;
+
+	result.longitude /= 100;
+	result.longitude *= pi / 180.0;
+
+	inp >> buf;
+	if (buf.size() == 1)
+		if (buf[0] == 'W')
+			result.longitude *= -1;
+
+	inp >> buf;
+	inp >> buf;
+	inp >> buf;
+
+	inp >> result.altitude;
+	inp >> buf;
+
+	inp >> bufInt;
+
+	result.altitude -= bufInt;
+
+	return result;
+}
+
 pack_output Device::backRotate(pack_input &inputNext, pack_input &inputFirst, pack_output &output) {
 	pack_output result;
 
@@ -292,6 +334,36 @@ vector<double> Device::smoothingKalman(vector<double> &measurements) {
 		kf.update(y);
 		result.push_back(kf.state().transpose()[0]);
 	}
+
+	return result;
+}
+
+resGPS Device::gettingDifferenceGPS(gps gps_first, gps gps_next) {
+	resGPS result;
+
+	sphericalCS sphericalCS_first;
+	sphericalCS sphericalCS_next;
+
+	sphericalCS_first = geographicalToSpherical(gps_first);
+	sphericalCS_next = geographicalToSpherical(gps_next);
+
+	result.h1 = gps_first.altitude;
+	result.h2 = gps_next.altitude;
+	result.distance = sqrt(pow(sphericalCS_next.x - sphericalCS_first.x,2) 
+		+ pow(sphericalCS_next.y - sphericalCS_first.y,2)
+		+ pow(sphericalCS_next.z - sphericalCS_first.z, 2));
+
+	return result;
+}
+
+sphericalCS Device::geographicalToSpherical(gps input) {
+	sphericalCS result;
+
+	double h = input.altitude;
+
+	result.x = (r0 + h)*cos(input.latitude)*cos(input.longitude);
+	result.y = (r0 + h)*cos(input.latitude)*sin(input.longitude);
+	result.z = (r0 + h)*sin(input.latitude);
 
 	return result;
 }
