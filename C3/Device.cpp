@@ -74,9 +74,10 @@ void Device::pathRestoration(string inputFile, string outputFile) {
 
 void Device::determinationOfMeasurementErrors(string input, string inputTrajectory, string inputGPS) {
 
-	vector<pack_output> trajectory;
+	vector<pack_output> trajectory, trajectory_correct;
 	vector<pack_input> trajectory_first, trajectory_next;
 	pack_output trajectory_start, trajectory_end;
+	pack_output trajectory_correct_start, trajectory_correct_end;
 	double count = 0;
 
 	////////////////
@@ -151,29 +152,25 @@ void Device::determinationOfMeasurementErrors(string input, string inputTrajecto
 	y_cor /= count;
 	z_cor /= count;
 
+	trajectory_correct.resize(count);
+
 	for (int i = 0; i < count; i++) {
-		trajectory[i].x += x_cor * (i + 1);
-		trajectory[i].y += y_cor * (i + 1);
-		trajectory[i].z += z_cor * (i + 1);
+		trajectory_correct[i] = trajectory[i];
+		trajectory_correct[i].x = trajectory[i].x + x_cor * (i + 1);
+		trajectory_correct[i].y = trajectory[i].y + y_cor * (i + 1);
+		trajectory_correct[i].z = trajectory[i].z + z_cor * (i + 1);
 	}
 
 	vector<double> trajectory_x, trajectory_y, trajectory_z;
-
-	//trajectory_x.reserve(count);
-	//trajectory_y.reserve(count);
-	//trajectory_z.reserve(count);
 
 	trajectory_x.resize(count);
 	trajectory_y.resize(count);
 	trajectory_z.resize(count);
 
 	for (int i = 0; i < count; i++) {
-		//trajectory_x.push_back[trajectory[i].x];
-		//trajectory_y.push_back[trajectory[i].y];
-		//trajectory_z.push_back[trajectory[i].z];
-		trajectory_x[i] = trajectory[i].x;
-		trajectory_y[i] = trajectory[i].y;
-		trajectory_z[i] = trajectory[i].z;
+		trajectory_x[i] = trajectory_correct[i].x;
+		trajectory_y[i] = trajectory_correct[i].y;
+		trajectory_z[i] = trajectory_correct[i].z;
 	}
 
 	trajectory_x = smoothingKalman(trajectory_x);
@@ -181,22 +178,27 @@ void Device::determinationOfMeasurementErrors(string input, string inputTrajecto
 	trajectory_z = smoothingKalman(trajectory_z);
 
 	for (int i = 0; i < count; i++) {
-		trajectory[i].x = trajectory_x[i];
-		trajectory[i].y = trajectory_y[i];
-		trajectory[i].z = trajectory_z[i];
+		trajectory_correct[i].x = trajectory_x[i];
+		trajectory_correct[i].y = trajectory_y[i];
+		trajectory_correct[i].z = trajectory_z[i];
+
+		if (i == 0)
+			trajectory_correct_start = trajectory_correct[i];
+		if ((i + 1) == count)
+			trajectory_correct_end = trajectory_correct[i];
 	}
 
 	/////////////////////////////////////////////////////
 
 	for (int i = 0; i < (count - 1); i++) {
-		double deltaTime = trajectory[i + 1].t - trajectory[i].t;
-		trajectory[i].v_x = (trajectory[i + 1].x - trajectory[i].x) / deltaTime;
-		trajectory[i].v_y = -1 * (trajectory[i + 1].y - trajectory[i].y) / deltaTime;
-		trajectory[i].v_z = -1 * (trajectory[i + 1].z - trajectory[i].z) / deltaTime;
+		double deltaTime = trajectory_correct[i + 1].t - trajectory_correct[i].t;
+		trajectory_correct[i].v_x = (trajectory_correct[i + 1].x - trajectory_correct[i].x) / deltaTime;
+		trajectory_correct[i].v_y = -1 * (trajectory_correct[i + 1].y - trajectory_correct[i].y) / deltaTime;
+		trajectory_correct[i].v_z = -1 * (trajectory_correct[i + 1].z - trajectory_correct[i].z) / deltaTime;
 	}
-	trajectory[count - 1].v_x = trajectory[count - 2].v_x;
-	trajectory[count - 1].v_y = trajectory[count - 2].v_y;
-	trajectory[count - 1].v_z = trajectory[count - 2].v_z;
+	trajectory_correct[count - 1].v_x = trajectory_correct[count - 2].v_x;
+	trajectory_correct[count - 1].v_y = trajectory_correct[count - 2].v_y;
+	trajectory_correct[count - 1].v_z = trajectory_correct[count - 2].v_z;
 
 	ifstream fileAGV(input);
 
@@ -224,24 +226,28 @@ void Device::determinationOfMeasurementErrors(string input, string inputTrajecto
 	}
 
 	for (int i = 0; i < count; i++) {
-		pack_output res = rotate(trajectory_next[i], trajectory[i]);
+		pack_output res = rotate(trajectory_next[i], trajectory_correct[i]);
 
-		trajectory[i].v_x = res.v_x;
-		trajectory[i].v_y = res.v_y;
-		trajectory[i].v_z = res.v_z;
+		trajectory_correct[i].v_x = res.v_x;
+		trajectory_correct[i].v_y = res.v_y;
+		trajectory_correct[i].v_z = res.v_z;
 	}
 
 	for (int i = 0; i < (count-1); i++) {
 		double deltaTime = trajectory[i + 1].t - trajectory[i].t;
-		trajectory_next[i].accel_x = (trajectory[i + 1].v_x - trajectory[i].v_x) / deltaTime;
-		trajectory_next[i].accel_y = (trajectory[i + 1].v_y - trajectory[i].v_y) / deltaTime;
-		trajectory_next[i].accel_z = (trajectory[i + 1].v_z - trajectory[i].v_z) / deltaTime;
+		trajectory_next[i].accel_x = (trajectory_correct[i + 1].v_x - trajectory_correct[i].v_x) / deltaTime;
+		trajectory_next[i].accel_y = (trajectory_correct[i + 1].v_y - trajectory_correct[i].v_y) / deltaTime;
+		trajectory_next[i].accel_z = (trajectory_correct[i + 1].v_z - trajectory_correct[i].v_z) / deltaTime;
 	}
 	trajectory_next[count - 1].accel_x = trajectory_next[count - 2].accel_x;
 	trajectory_next[count - 1].accel_y = trajectory_next[count - 2].accel_y;
 	trajectory_next[count - 1].accel_z = trajectory_next[count - 2].accel_z;
 
-	cout << "Quadratic Deviation: " << quadraticDeviation(x_cor, y_cor, z_cor, count);
+	double mDif = sqrt(pow(trajectory_correct_start.x - trajectory_correct_end.x,2) 
+		+ pow(trajectory_correct_start.y - trajectory_correct_end.y,2) 
+		+ pow(trajectory_correct_start.z - trajectory_correct_end.z,2));
+
+	cout << "Quadratic Deviation: " << quadraticDeviation(trajectory, trajectory_correct, mDif);
 	/////////////////////////////////////////////////////
 
 	/////////////////////////////////////
@@ -544,14 +550,16 @@ vector<double> Device::smoothingKalman(vector<double> &measurements) {
 	return result;
 }
 
-double Device::quadraticDeviation(double x_cor, double y_cor, double z_cor, int count) {
+double Device::quadraticDeviation(vector<pack_output> trajectory, vector<pack_output> trajectory_correct, double mDif) {
 	double result = 0.0;
 
-	for (int i = 0; i < count; i++) {
-		result += sqrt(pow(x_cor * (i + 1), 2) + pow(y_cor * (i + 1), 2) + pow(z_cor * (i + 1), 2));
+	for (int i = 0; i < trajectory.size(); i++) {
+		result += sqrt(pow((trajectory_correct[i].x - trajectory[i].x) / mDif,2) 
+			+ pow((trajectory_correct[i].y - trajectory[i].y) / mDif,2) 
+			+ pow((trajectory_correct[i].z - trajectory[i].z) / mDif,2));
 	}
 
-	result /= count;
+	result /= trajectory.size();
 
 	return result;
 }

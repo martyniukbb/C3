@@ -115,7 +115,7 @@ public:
 	static vector<omega> smoothing(vector<omega> &input);
 	static void subtractionCentrifugalForce(pack_output &state, pack_input &input, omega stateOmega, double deltaTime);
 	static vector<double> smoothingKalman(vector<double> &input);
-	static double quadraticDeviation(double x_cor, double y_cor, double z_cor, int count);
+	static double quadraticDeviation(vector<pack_output> trajectory, vector<pack_output> trajectory_correct, double mDif);
 
 	static resGPS gettingDifferenceGPS(gps gps_first, gps gps_next);
 	static sphericalCS geographicalToSpherical(gps input);
