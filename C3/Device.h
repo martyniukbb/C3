@@ -5,7 +5,7 @@
 
 #define g 9.81
 #define numberPack 10
-#define r0 6371
+#define r0 6371000
 #define pi 3.14
 
 typedef struct vecXYZ {
@@ -104,16 +104,18 @@ class Device
 public:
 	Device();
 	static void pathRestoration(string inputFile, string outputFile);
-	static void determinationOfMeasurementErrors(string inputTrajectory, string inputGPS);
+	static void determinationOfMeasurementErrors(string input, string inputTrajectory, string inputGPS);
 	static void algorithmPathRestoration(vector<pack_input> &input, vector<pack_output> &output, vector<omega> omegaPack, pack_output &state, pack_input &state_input);
 	static void writePackToFile(ofstream &out, pack_output &packOut);
 	static void readPackOfFile(ifstream &inp, pack_input &packInp);
 	static gps readGPSPackOfFile(ifstream &inp);
-	static pack_output backRotate(pack_input &inputNext, pack_input &inputFirst, pack_output &output);
+	static pack_output rotate(pack_input &inputFirst, pack_output &output);
+	static pack_output backRotate(pack_input &inputFirst, pack_output &output);
 	static vector<pack_input> smoothing(vector<pack_input> &input);
 	static vector<omega> smoothing(vector<omega> &input);
 	static void subtractionCentrifugalForce(pack_output &state, pack_input &input, omega stateOmega, double deltaTime);
 	static vector<double> smoothingKalman(vector<double> &input);
+	static double quadraticDeviation(double x_cor, double y_cor, double z_cor, int count);
 
 	static resGPS gettingDifferenceGPS(gps gps_first, gps gps_next);
 	static sphericalCS geographicalToSpherical(gps input);

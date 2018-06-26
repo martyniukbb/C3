@@ -26,6 +26,7 @@ void Device::pathRestoration(string inputFile, string outputFile) {
 	ofstream file_out(outputFile);
 
 	file >> count;
+	file_out << count << endl;
 
 	readPackOfFile(file, state_input);
 	writePackToFile(file_out, state);
@@ -71,9 +72,10 @@ void Device::pathRestoration(string inputFile, string outputFile) {
 	file_out.close();
 }
 
-void Device::determinationOfMeasurementErrors(string inputTrajectory, string inputGPS) {
+void Device::determinationOfMeasurementErrors(string input, string inputTrajectory, string inputGPS) {
 
 	vector<pack_output> trajectory;
+	vector<pack_input> trajectory_first, trajectory_next;
 	pack_output trajectory_start, trajectory_end;
 	double count = 0;
 
@@ -120,6 +122,7 @@ void Device::determinationOfMeasurementErrors(string inputTrajectory, string inp
 	pXYZ_correct.z = resGPS_correct.h2 - resGPS_correct.h1;
 
 	double m_d2 = sqrt(pow(resGPS_correct.distance,2) - pow(pXYZ_correct.z,2));
+	//double m_d2 = sqrt(pow(47.22, 2) - pow(pXYZ_correct.z, 2));
 
 	vecXY pXY;
 
@@ -154,8 +157,91 @@ void Device::determinationOfMeasurementErrors(string inputTrajectory, string inp
 		trajectory[i].z += z_cor * (i + 1);
 	}
 
+	vector<double> trajectory_x, trajectory_y, trajectory_z;
+
+	//trajectory_x.reserve(count);
+	//trajectory_y.reserve(count);
+	//trajectory_z.reserve(count);
+
+	trajectory_x.resize(count);
+	trajectory_y.resize(count);
+	trajectory_z.resize(count);
+
+	for (int i = 0; i < count; i++) {
+		//trajectory_x.push_back[trajectory[i].x];
+		//trajectory_y.push_back[trajectory[i].y];
+		//trajectory_z.push_back[trajectory[i].z];
+		trajectory_x[i] = trajectory[i].x;
+		trajectory_y[i] = trajectory[i].y;
+		trajectory_z[i] = trajectory[i].z;
+	}
+
+	trajectory_x = smoothingKalman(trajectory_x);
+	trajectory_y = smoothingKalman(trajectory_y);
+	trajectory_z = smoothingKalman(trajectory_z);
+
+	for (int i = 0; i < count; i++) {
+		trajectory[i].x = trajectory_x[i];
+		trajectory[i].y = trajectory_y[i];
+		trajectory[i].z = trajectory_z[i];
+	}
+
 	/////////////////////////////////////////////////////
 
+	for (int i = 0; i < (count - 1); i++) {
+		double deltaTime = trajectory[i + 1].t - trajectory[i].t;
+		trajectory[i].v_x = (trajectory[i + 1].x - trajectory[i].x) / deltaTime;
+		trajectory[i].v_y = -1 * (trajectory[i + 1].y - trajectory[i].y) / deltaTime;
+		trajectory[i].v_z = -1 * (trajectory[i + 1].z - trajectory[i].z) / deltaTime;
+	}
+	trajectory[count - 1].v_x = trajectory[count - 2].v_x;
+	trajectory[count - 1].v_y = trajectory[count - 2].v_y;
+	trajectory[count - 1].v_z = trajectory[count - 2].v_z;
+
+	ifstream fileAGV(input);
+
+	fileAGV >> count;
+
+	for (int i = 0; i < count; i++) {
+		pack_input push;
+
+		readPackOfFile(fileAGV, push);
+
+		trajectory_first.push_back(push);
+	}
+
+	fileAGV.close();
+
+	for (int i = 0; i < count; i++) {
+		pack_input push;
+
+		push.t = trajectory_first[i].t;
+		push.fi_x = trajectory_first[i].fi_x;
+		push.fi_y = trajectory_first[i].fi_y;
+		push.fi_z = trajectory_first[i].fi_z;
+
+		trajectory_next.push_back(push);
+	}
+
+	for (int i = 0; i < count; i++) {
+		pack_output res = rotate(trajectory_next[i], trajectory[i]);
+
+		trajectory[i].v_x = res.v_x;
+		trajectory[i].v_y = res.v_y;
+		trajectory[i].v_z = res.v_z;
+	}
+
+	for (int i = 0; i < (count-1); i++) {
+		double deltaTime = trajectory[i + 1].t - trajectory[i].t;
+		trajectory_next[i].accel_x = (trajectory[i + 1].v_x - trajectory[i].v_x) / deltaTime;
+		trajectory_next[i].accel_y = (trajectory[i + 1].v_y - trajectory[i].v_y) / deltaTime;
+		trajectory_next[i].accel_z = (trajectory[i + 1].v_z - trajectory[i].v_z) / deltaTime;
+	}
+	trajectory_next[count - 1].accel_x = trajectory_next[count - 2].accel_x;
+	trajectory_next[count - 1].accel_y = trajectory_next[count - 2].accel_y;
+	trajectory_next[count - 1].accel_z = trajectory_next[count - 2].accel_z;
+
+	cout << "Quadratic Deviation: " << quadraticDeviation(x_cor, y_cor, z_cor, count);
 	/////////////////////////////////////////////////////
 
 	/////////////////////////////////////
@@ -185,13 +271,13 @@ void Device::algorithmPathRestoration(vector<pack_input> &input, vector<pack_out
 			subtractionCentrifugalForce(state, input[i], omegaPack[i], delta_time);
 		//////////////
 
-		pack_output resultRotate = backRotate(input[i], state_input, state);
+		pack_output resultRotate = backRotate(state_input, state);
 
 		////////////
 		state.t = input[i].t;
 		state.x += delta_time * resultRotate.v_x;
-		state.y += delta_time * resultRotate.v_y;
-		state.z += delta_time * resultRotate.v_z;
+		state.y -= delta_time * resultRotate.v_y;
+		state.z -= delta_time * resultRotate.v_z;
 		////////////
 
 		outputBuffer = state;
@@ -224,7 +310,7 @@ gps Device::readGPSPackOfFile(ifstream &inp) {
 	gps result;
 
 	string buf;
-	int bufInt = 0;
+	double bufDouble = 0;
 
 	inp >> buf;
 	inp >> buf;
@@ -255,14 +341,44 @@ gps Device::readGPSPackOfFile(ifstream &inp) {
 	inp >> result.altitude;
 	inp >> buf;
 
-	inp >> bufInt;
+	inp >> bufDouble;
 
-	result.altitude -= bufInt;
+	result.altitude -= bufDouble;
+
+	inp >> buf;
+	inp >> buf;
+	inp >> buf;
 
 	return result;
 }
 
-pack_output Device::backRotate(pack_input &inputNext, pack_input &inputFirst, pack_output &output) {
+pack_output Device::rotate(pack_input &inputFirst, pack_output &output) {
+	pack_output result;
+
+	double alfa = inputFirst.fi_x,
+		beta = inputFirst.fi_y,
+		gamma = inputFirst.fi_z;
+
+	double v_x = output.v_x * (cos(beta)*cos(gamma))
+		+ output.v_y * (-1 * cos(beta)*sin(gamma))
+		+ output.v_z * (sin(beta));
+
+	double v_y = output.v_x * (cos(alfa) * sin(gamma) + cos(gamma)*sin(alfa)*sin(beta))
+		+ output.v_y * (cos(alfa)*cos(gamma) - sin(alfa)*sin(beta)*sin(gamma))
+		+ output.v_z * (-1 * cos(beta)*sin(alfa));
+
+	double v_z = output.v_x * (sin(alfa)*sin(gamma) - cos(alfa)*cos(gamma)*sin(beta))
+		+ output.v_y * (cos(gamma)*sin(alfa) + cos(alfa)*sin(beta)*sin(gamma))
+		+ output.v_z * (cos(alfa)*cos(beta));
+
+	result.v_x = v_x;
+	result.v_y = v_y;
+	result.v_z = v_z;
+
+	return result;
+}
+
+pack_output Device::backRotate(pack_input &inputFirst, pack_output &output) {
 	pack_output result;
 
 	double alfa = inputFirst.fi_x,
@@ -424,6 +540,18 @@ vector<double> Device::smoothingKalman(vector<double> &measurements) {
 		kf.update(y);
 		result.push_back(kf.state().transpose()[0]);
 	}
+
+	return result;
+}
+
+double Device::quadraticDeviation(double x_cor, double y_cor, double z_cor, int count) {
+	double result = 0.0;
+
+	for (int i = 0; i < count; i++) {
+		result += sqrt(pow(x_cor * (i + 1), 2) + pow(y_cor * (i + 1), 2) + pow(z_cor * (i + 1), 2));
+	}
+
+	result /= count;
 
 	return result;
 }
