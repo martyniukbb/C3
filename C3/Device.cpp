@@ -243,11 +243,15 @@ void Device::determinationOfMeasurementErrors(string input, string inputTrajecto
 	trajectory_next[count - 1].accel_y = trajectory_next[count - 2].accel_y;
 	trajectory_next[count - 1].accel_z = trajectory_next[count - 2].accel_z;
 
-	double mDif = sqrt(pow(trajectory_correct_start.x - trajectory_correct_end.x,2) 
+	double mDif = sqrt(pow(trajectory_start.x - trajectory_end.x, 2)
+		+ pow(trajectory_start.y - trajectory_end.y, 2)
+		+ pow(trajectory_start.z - trajectory_end.z, 2));
+
+	double mDif_correct = sqrt(pow(trajectory_correct_start.x - trajectory_correct_end.x,2) 
 		+ pow(trajectory_correct_start.y - trajectory_correct_end.y,2) 
 		+ pow(trajectory_correct_start.z - trajectory_correct_end.z,2));
 
-	cout << "Quadratic Deviation: " << quadraticDeviation(trajectory, trajectory_correct, mDif);
+	cout << "Quadratic Deviation: " << quadraticDeviation(trajectory, trajectory_correct, mDif, mDif_correct);
 	/////////////////////////////////////////////////////
 
 	/////////////////////////////////////
@@ -550,16 +554,18 @@ vector<double> Device::smoothingKalman(vector<double> &measurements) {
 	return result;
 }
 
-double Device::quadraticDeviation(vector<pack_output> trajectory, vector<pack_output> trajectory_correct, double mDif) {
+double Device::quadraticDeviation(vector<pack_output> trajectory, vector<pack_output> trajectory_correct, double mDif, double mDif_correct) {
 	double result = 0.0;
 
 	for (int i = 0; i < trajectory.size(); i++) {
-		result += sqrt(pow((trajectory_correct[i].x - trajectory[i].x) / mDif,2) 
-			+ pow((trajectory_correct[i].y - trajectory[i].y) / mDif,2) 
-			+ pow((trajectory_correct[i].z - trajectory[i].z) / mDif,2));
+		result += pow(trajectory_correct[i].x / mDif_correct - trajectory[i].x / mDif,2) 
+			+ pow(trajectory_correct[i].y / mDif_correct - trajectory[i].y / mDif,2) 
+			+ pow(trajectory_correct[i].z / mDif_correct - trajectory[i].z / mDif,2);
 	}
 
 	result /= trajectory.size();
+
+	result = sqrt(result);
 
 	return result;
 }
