@@ -8,7 +8,7 @@ int main(void) {
 
 	Device::pathRestoration("in.dat", "out.dat");
 
-	Device::determinationOfMeasurementErrors("in.dat", "out.dat", "inGPS.dat");
+	Device::determinationOfMeasurementErrors("in.dat", "out.dat", "inGPS.dat", "outputCorrect.dat");
 
 	system("PAUSE");
 

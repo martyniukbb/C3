@@ -43,20 +43,7 @@ void Device::pathRestoration(string inputFile, string outputFile) {
 			lastReadPack.push_back(readBuffer);
 		}
 
-		for (int i = 0; i < lastReadPack.size()-1; i++) {
-			omega pushBuffer;
-			
-			double deltaTime = lastReadPack[i + 1].t - lastReadPack[i].t;
-
-			pushBuffer.omega_x = (lastReadPack[i + 1].fi_x - lastReadPack[i].fi_x)
-				/ deltaTime;
-			pushBuffer.omega_y = (lastReadPack[i + 1].fi_y - lastReadPack[i].fi_y)
-				/ deltaTime;
-			pushBuffer.omega_z = (lastReadPack[i + 1].fi_z - lastReadPack[i].fi_z)
-				/ deltaTime;
-
-			lastOmegaPack.push_back(pushBuffer);
-		}
+		lastOmegaPack = angularVelocityAcquisition(lastReadPack);
 
 		lastOmegaPack = smoothing(lastOmegaPack);
 
@@ -72,7 +59,7 @@ void Device::pathRestoration(string inputFile, string outputFile) {
 	file_out.close();
 }
 
-void Device::determinationOfMeasurementErrors(string input, string inputTrajectory, string inputGPS) {
+void Device::determinationOfMeasurementErrors(string input, string inputTrajectory, string inputGPS, string outputCorrect) {
 
 	vector<pack_output> trajectory, trajectory_correct;
 	vector<pack_input> trajectory_first, trajectory_next;
@@ -146,7 +133,7 @@ void Device::determinationOfMeasurementErrors(string input, string inputTrajecto
 
 	x_cor = pXYZ_correct.x - pXYZ.x;
 	y_cor = pXYZ_correct.y - pXYZ.y;
-	z_cor = pXYZ_correct.z - pXYZ.z;
+	z_cor = -1 * pXYZ_correct.z - pXYZ.z;
 
 	x_cor /= count;
 	y_cor /= count;
@@ -193,8 +180,8 @@ void Device::determinationOfMeasurementErrors(string input, string inputTrajecto
 	for (int i = 0; i < (count - 1); i++) {
 		double deltaTime = trajectory_correct[i + 1].t - trajectory_correct[i].t;
 		trajectory_correct[i].v_x = (trajectory_correct[i + 1].x - trajectory_correct[i].x) / deltaTime;
-		trajectory_correct[i].v_y = -1 * (trajectory_correct[i + 1].y - trajectory_correct[i].y) / deltaTime;
-		trajectory_correct[i].v_z = -1 * (trajectory_correct[i + 1].z - trajectory_correct[i].z) / deltaTime;
+		trajectory_correct[i].v_y = (trajectory_correct[i + 1].y - trajectory_correct[i].y) / deltaTime;
+		trajectory_correct[i].v_z = (trajectory_correct[i + 1].z - trajectory_correct[i].z) / deltaTime;
 	}
 	trajectory_correct[count - 1].v_x = trajectory_correct[count - 2].v_x;
 	trajectory_correct[count - 1].v_y = trajectory_correct[count - 2].v_y;
@@ -233,6 +220,22 @@ void Device::determinationOfMeasurementErrors(string input, string inputTrajecto
 		trajectory_correct[i].v_z = res.v_z;
 	}
 
+	vector<omega> lastOmegaPack = angularVelocityAcquisition(trajectory_next);
+
+	lastOmegaPack = smoothing(lastOmegaPack);
+
+	for (int i = 0; i < trajectory_next.size() - 1; i++) {
+		double delta_time = trajectory_next[i + 1].t - trajectory_next[i].t;
+
+		double vx = lastOmegaPack[i].omega_y * trajectory_correct[i].v_z - lastOmegaPack[i].omega_z * trajectory_correct[i].v_y,
+			vy = -1 * (lastOmegaPack[i].omega_x * trajectory_correct[i].v_z - lastOmegaPack[i].omega_z * trajectory_correct[i].v_x),
+			vz = lastOmegaPack[i].omega_x * trajectory_correct[i].v_y - lastOmegaPack[i].omega_y * trajectory_correct[i].v_x;
+		trajectory_correct[i].v_x += delta_time * vx;
+		trajectory_correct[i].v_y += delta_time * vy;
+		trajectory_correct[i].v_z += delta_time * vz;
+
+	}
+
 	for (int i = 0; i < (count-1); i++) {
 		double deltaTime = trajectory[i + 1].t - trajectory[i].t;
 		trajectory_next[i].accel_x = (trajectory_correct[i + 1].v_x - trajectory_correct[i].v_x) / deltaTime;
@@ -252,6 +255,23 @@ void Device::determinationOfMeasurementErrors(string input, string inputTrajecto
 		+ pow(trajectory_correct_start.z - trajectory_correct_end.z,2));
 
 	cout << "Quadratic Deviation: " << quadraticDeviation(trajectory, trajectory_correct, mDif, mDif_correct);
+
+	ofstream outCor(outputCorrect);
+
+	outCor << count << endl;
+
+	for (int i = 0; i < trajectory_next.size(); i++) {
+		outCor << trajectory_next[i].t << " "
+			<< trajectory_next[i].fi_x << " "
+			<< trajectory_next[i].fi_y << " "
+			<< trajectory_next[i].fi_z << " "
+			<< trajectory_next[i].accel_x << " "
+			<< trajectory_next[i].accel_y << " "
+			<< (trajectory_next[i].accel_z + g) << " "
+			<< trajectory_correct[i].v_x << endl;
+	}
+
+	outCor.close();
 	/////////////////////////////////////////////////////
 
 	/////////////////////////////////////
@@ -286,8 +306,8 @@ void Device::algorithmPathRestoration(vector<pack_input> &input, vector<pack_out
 		////////////
 		state.t = input[i].t;
 		state.x += delta_time * resultRotate.v_x;
-		state.y -= delta_time * resultRotate.v_y;
-		state.z -= delta_time * resultRotate.v_z;
+		state.y += delta_time * resultRotate.v_y;
+		state.z += delta_time * resultRotate.v_z;
 		////////////
 
 		outputBuffer = state;
@@ -568,6 +588,26 @@ double Device::quadraticDeviation(vector<pack_output> trajectory, vector<pack_ou
 	result = sqrt(result);
 
 	return result;
+}
+
+vector<omega> Device::angularVelocityAcquisition(vector<pack_input> lastReadPack) {
+	vector<omega> lastOmegaPack;
+	for (int i = 0; i < lastReadPack.size() - 1; i++) {
+		omega pushBuffer;
+
+		double deltaTime = lastReadPack[i + 1].t - lastReadPack[i].t;
+
+		pushBuffer.omega_x = (lastReadPack[i + 1].fi_x - lastReadPack[i].fi_x)
+			/ deltaTime;
+		pushBuffer.omega_y = (lastReadPack[i + 1].fi_y - lastReadPack[i].fi_y)
+			/ deltaTime;
+		pushBuffer.omega_z = (lastReadPack[i + 1].fi_z - lastReadPack[i].fi_z)
+			/ deltaTime;
+
+		lastOmegaPack.push_back(pushBuffer);
+	}
+
+	return lastOmegaPack;
 }
 
 resGPS Device::gettingDifferenceGPS(gps gps_first, gps gps_next) {

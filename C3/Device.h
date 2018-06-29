@@ -104,7 +104,7 @@ class Device
 public:
 	Device();
 	static void pathRestoration(string inputFile, string outputFile);
-	static void determinationOfMeasurementErrors(string input, string inputTrajectory, string inputGPS);
+	static void determinationOfMeasurementErrors(string input, string inputTrajectory, string inputGPS, string outputCorrect);
 	static void algorithmPathRestoration(vector<pack_input> &input, vector<pack_output> &output, vector<omega> omegaPack, pack_output &state, pack_input &state_input);
 	static void writePackToFile(ofstream &out, pack_output &packOut);
 	static void readPackOfFile(ifstream &inp, pack_input &packInp);
@@ -116,6 +116,7 @@ public:
 	static void subtractionCentrifugalForce(pack_output &state, pack_input &input, omega stateOmega, double deltaTime);
 	static vector<double> smoothingKalman(vector<double> &input);
 	static double quadraticDeviation(vector<pack_output> trajectory, vector<pack_output> trajectory_correct, double mDif, double mDif_correct);
+	static vector<omega> angularVelocityAcquisition(vector<pack_input> lastReadPack);
 
 	static resGPS gettingDifferenceGPS(gps gps_first, gps gps_next);
 	static sphericalCS geographicalToSpherical(gps input);
